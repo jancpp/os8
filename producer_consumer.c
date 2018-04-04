@@ -291,6 +291,7 @@ void *producer (void *parg)
                 */
                 while (fifo->full && *total_produced != WORK_MAX) {
                         printf ("prod %d:  FULL.\n", my_tid);
+                        pthread_cond_wait(fifo->notFull, fifo->mutex);
                 }
 
                 /*
@@ -298,6 +299,8 @@ void *producer (void *parg)
                 * the configured maximum, if so, we can quit.
                 */
                 if (*total_produced >= WORK_MAX) {
+                        pthread_mutex_unlock(fifo->mutex);
+                        pthread_cond_broadcast(fifo->notEmpty);
                         break;
                 }
 
@@ -308,6 +311,8 @@ void *producer (void *parg)
                 */
                 item_produced = (*total_produced)++;
                 queueAdd (fifo, item_produced);
+                pthread_mutex_unlock(fifo->mutex);
+                pthread_cond_broadcast(fifo->notEmpty);
 
                 /*
                 * Announce the production outside the critical section
@@ -343,8 +348,10 @@ void *consumer (void *carg)
                 * If the queue is empty, there is nothing to do, so wait until it
                 * si not empty.
                 */
+                pthread_mutex_lock(fifo->mutex);
                 while (fifo->empty && *total_consumed != WORK_MAX) {
                         printf ("con %d:   EMPTY.\n", my_tid);
+                        pthread_cond_wait(fifo->notEmpty, fifo->mutex);
                 }
 
                 /*
@@ -352,6 +359,8 @@ void *consumer (void *carg)
                 * stop
                 */
                 if (*total_consumed >= WORK_MAX) {
+                        pthread_mutex_unlock(fifo->mutex);
+                        pthread_cond_broadcast(fifo->notFull);
                         break;
                 }
 
@@ -363,6 +372,9 @@ void *consumer (void *carg)
                 */
                 queueRemove (fifo, &item_consumed);
                 (*total_consumed)++;
+
+                pthread_mutex_unlock(fifo->mutex);
+                pthread_cond_broadcast(fifo->notFull);
 
 
                 /*
